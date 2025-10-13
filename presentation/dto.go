@@ -23,8 +23,8 @@ func toDTO(t domain.Tech) TechDTO {
 // toDTOsは domain.Tech のスライスを TechDTO のスライスに変換する（複数形）
 func toDTOs(techs []domain.Tech) []TechDTO {
 	dtos := make([]TechDTO, len(techs))
-	for _, t := range techs {
-		dtos = append(dtos, toDTO(t))
+	for i, t := range techs {
+		dtos[i] = toDTO(t)
 	}
 	return dtos
 }
