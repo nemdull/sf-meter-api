@@ -32,9 +32,9 @@ func (m *TechRepoMemory) GetAll() ([]domain.Tech, error) {
 }
 
 // GetByIDはIDでTechデータを取得する
-func (m *TechRepoMemory) GetByID(id int) (domain.Tech, error) {
+func (m *TechRepoMemory) GetByID(id int) (*domain.Tech, error) {
 	if tech, ok := m.data[id]; ok {
-		return tech, nil
+		return &tech, nil
 	}
-	return domain.Tech{}, errors.New("ID not found")
+	return nil, errors.New("ID not found")
 }

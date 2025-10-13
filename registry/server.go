@@ -5,6 +5,7 @@ import (
 
 	"github.com/nemdull/sf-meter-api/domain"
 	"github.com/nemdull/sf-meter-api/infrastructure"
+	"github.com/nemdull/sf-meter-api/presentation"
 	"github.com/nemdull/sf-meter-api/usecase"
 )
 
@@ -26,7 +27,7 @@ func NewHTTPServer(addr string) *http.Server {
 	service := usecase.NewTechService(repo)
 
 	// presentation層：HTTPハンドラーの実装
-	handler := NewTechHandler(service)
+	handler := presentation.NewTechHandler(service)
 
 	// presentation層：ルーターの実装
 	router := presentation.NewRouter(handler)
