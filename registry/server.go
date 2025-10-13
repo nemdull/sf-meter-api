@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/nemdull/sf-meter-api/domain"
+	"github.com/nemdull/sf-meter-api/infrastructure"
 )
 
 // NewHTTPServer はHTTPサーバーのインスタンスを生成して返す
@@ -18,7 +19,7 @@ func NewHTTPServer(addr string) *http.Server {
 	}
 
 	// infrastructure層：データ取得の実装
-	repo := infrastructure.NewInMemoryTechRepository(seed)
+	repo := infrastructure.NewTechRepoMemory(seed)
 
 	// usecase層：ビジネスロジック（TechService）の実装
 	service := domain.NewTechService(repo)
