@@ -12,12 +12,12 @@ func NewTechService(repo TechRepository) *TechService {
 	return &TechService{repo: repo}
 }
 
-// GetAllTechs はすべての技術情報を取得する
-func (s *TechService) GetAllTechs() ([]domain.Tech, error) {
-	return s.repo.GetAll()
+// GetAll はすべての技術情報を取得する
+func (s *TechService) GetAll() ([]domain.Tech, error) {
+	return s.repo.FindAll()
 }
 
-// GetTechByID はIDに基づいて技術情報を取得する
-func (s *TechService) GetTechByID(id int) (*domain.Tech, error) {
-	return s.repo.GetByID(id)
+// GetByID はIDに基づいて技術情報を取得する
+func (s *TechService) GetByID(id int) (*domain.Tech, error) {
+	return s.repo.FindByID(id)
 }
