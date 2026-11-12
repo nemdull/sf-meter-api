@@ -1,4 +1,4 @@
-.PHONY: build test test-verbose lint run run-local docker-build clean help
+.PHONY: build test test-db test-verbose lint run run-local docker-build clean help fmt deps mod-tidy db-up db-down db-logs db-shell dev-setup ci
 
 # Go version
 GO := go
@@ -16,9 +16,10 @@ help:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  make build         - Compile the binary"
-	@echo "  make test          - Run all tests"
+	@echo "  make test          - Run all tests (PostgreSQL tests are skipped)"
+	@echo "  make test-db       - Run all tests including PostgreSQL (starts the db container)"
 	@echo "  make test-verbose  - Run tests with coverage report"
-	@echo "  make lint          - Run go vet for linting"
+	@echo "  make lint          - Run gofmt check and go vet"
 	@echo "  make run           - Run with Docker Compose (PostgreSQL + app)"
 	@echo "  make run-local     - Run locally with Docker database only"
 	@echo "  make docker-build  - Build Docker image"
@@ -33,16 +34,26 @@ build: clean
 
 test:
 	@echo "Running tests..."
-	@$(GO) test -v ./...
+	@$(GO) test -race ./...
 	@echo "✓ Tests passed"
+
+# PostgreSQL 実装にも同じテストを当てる。テーブルを空にしてから始めるので、開発用の DB にだけ向けること
+test-db:
+	@echo "Starting database with Docker Compose..."
+	@docker compose up -d --wait db
+	@echo "Running tests with PostgreSQL..."
+	@TEST_DATABASE_URL="postgres://sfmeter:sfmeter@localhost:5432/sfmeter_db?sslmode=disable" $(GO) test -race -count=1 ./...
+	@echo "✓ Tests passed (PostgreSQL included)"
 
 test-verbose:
 	@echo "Running tests with coverage..."
-	@$(GO) test -v -coverprofile=coverage.out ./...
+	@$(GO) test -race -v -coverprofile=coverage.out ./...
 	@$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "✓ Coverage report generated: coverage.html"
 
 lint:
+	@echo "Checking gofmt..."
+	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:" && gofmt -l . && exit 1)
 	@echo "Running go vet..."
 	@$(GO) vet ./...
 	@echo "✓ Lint check passed"
@@ -54,9 +65,7 @@ run:
 
 run-local:
 	@echo "Starting database with Docker Compose..."
-	@docker compose up -d db
-	@echo "Waiting for PostgreSQL to be ready..."
-	@sleep 3
+	@docker compose up -d --wait db
 	@echo "Starting sf-meter-api locally..."
 	@DATABASE_URL="postgres://sfmeter:sfmeter@localhost:5432/sfmeter_db?sslmode=disable" $(GO) run $(MAIN_FILE)
 
