@@ -8,10 +8,16 @@ services:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgres://sfmeter:sfmeter@db:5432/sfmeter_db?sslmode=disable
+      # 書き込みの API を開けたいときだけ、.env か環境変数で ADMIN_TOKEN を渡す（空なら閉じたまま）
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
     restart: on-failure
 
   db:
     image: postgres:16-alpine
+    ports:
+      # make run-local / make test-db で、手元の Go から直接つなぐため
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: sfmeter
       POSTGRES_PASSWORD: sfmeter

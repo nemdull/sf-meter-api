@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同じブランチで新しい実行が始まったら、古い実行は止める
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 書式・vet・テスト
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    # PostgreSQL 実装にも、メモリ実装と同じテストを当てる
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sfmeter
+          POSTGRES_PASSWORD: sfmeter
+          POSTGRES_DB: sfmeter_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sfmeter -d sfmeter_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://sfmeter:sfmeter@localhost:5432/sfmeter_db?sslmode=disable
+      PGPASSWORD: sfmeter
+
+    steps:
+      # 外部のアクションは、タグではなくコミットの番号で固定する
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: 書式（gofmt）
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt をかけていないファイルがあります:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: 依存に過不足が無いか（go mod tidy）
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: テーブルを作る
+        run: psql -h localhost -U sfmeter -d sfmeter_db -v ON_ERROR_STOP=1 -f db/init.sql
+
+      - name: テスト（-race、PostgreSQL つき）
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      - name: PostgreSQL のテストが飛ばされていないこと
+        run: |
+          go test -count=1 -run TestPostgresTechRepo_Contract -v ./infrastructure/ | tee result.txt
+          grep -q -- "--- PASS: TestPostgresTechRepo_Contract" result.txt
+
+      - name: カバレッジ
+        run: go tool cover -func=coverage.out | tail -n 1
+
+  build:
+    name: ビルド（バイナリとコンテナ）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+      - name: バイナリ
+        run: go build -trimpath -o bin/sf-meter-api .
+      - name: コンテナ
+        run: docker build -t sf-meter-api:ci .
+      - name: コンテナが起動して /health に答えること
+        run: |
+          docker run -d --name api -p 8080:8080 sf-meter-api:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:8080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs api
+          exit 1
