@@ -1,0 +1,253 @@
+openapi: 3.1.0
+info:
+  title: sf-meter API
+  version: 1.0.0
+  description: |
+    SF 作品に登場するテクノロジーと、その「実現度」（0〜100）を返す API。
+
+    - 読み取りは誰でもできる
+    - 追加・更新・削除は、サーバーに ADMIN_TOKEN を設定したときだけ有効になり、
+      `Authorization: Bearer <トークン>` が要る
+    - エラーは、どれも `{"error": {"code", "message"}}` の形で返る
+
+    このファイルと実装のパスがずれていないかは、`presentation/router_test.go` が確かめている。
+servers:
+  - url: http://localhost:8080
+    description: 手元で起動したとき
+tags:
+  - name: techs
+    description: テクノロジー
+  - name: system
+    description: サーバーの状態
+paths:
+  /api/v1/techs:
+    get:
+      tags: [techs]
+      summary: 一覧を取る
+      description: 本文は配列。絞り込み後の総件数は `X-Total-Count` ヘッダーに入る。
+      parameters:
+        - name: q
+          in: query
+          description: 名前か説明に含まれる文字。英字の大文字・小文字は区別しない
+          schema: { type: string }
+        - name: min_score
+          in: query
+          description: 実現度の下限（含む）
+          schema: { type: integer, minimum: 0, maximum: 100, default: 0 }
+        - name: max_score
+          in: query
+          description: 実現度の上限（含む）
+          schema: { type: integer, minimum: 0, maximum: 100, default: 100 }
+        - name: sort
+          in: query
+          description: 並び順。`id` は登録順、`score` は実現度の低い順、`-score` は高い順、`name` は名前順
+          schema: { type: string, enum: [id, score, -score, name], default: id }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: 条件に合うテクノロジー
+          headers:
+            X-Total-Count:
+              description: 絞り込み後の総件数（limit / offset を当てる前）
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tech" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    post:
+      tags: [techs]
+      summary: 1 件足す
+      security: [{ adminToken: [] }]
+      requestBody: { $ref: "#/components/requestBodies/Tech" }
+      responses:
+        "201":
+          description: 足したテクノロジー
+          headers:
+            Location:
+              description: 足したもののパス
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tech" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/WritesDisabled" }
+  /api/v1/techs/random:
+    get:
+      tags: [techs]
+      summary: どれか 1 件を選んで返す
+      responses:
+        "200":
+          description: 選ばれたテクノロジー
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tech" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/techs/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [techs]
+      summary: 1 件取る
+      responses:
+        "200":
+          description: 指定したテクノロジー
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tech" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [techs]
+      summary: 1 件を置き換える
+      security: [{ adminToken: [] }]
+      requestBody: { $ref: "#/components/requestBodies/Tech" }
+      responses:
+        "200":
+          description: 置き換えたあとのテクノロジー
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tech" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/WritesDisabled" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [techs]
+      summary: 1 件消す
+      security: [{ adminToken: [] }]
+      responses:
+        "204": { description: 消した }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/WritesDisabled" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/stats:
+    get:
+      tags: [techs]
+      summary: 全体の集計を取る
+      responses:
+        "200":
+          description: 件数・平均・段階ごとの内訳
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stats" }
+  /health:
+    get:
+      tags: [system]
+      summary: サーバーが動いているかを確かめる
+      responses:
+        "200":
+          description: 動いている
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: 保存先（PostgreSQL）につながらない
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+components:
+  securitySchemes:
+    adminToken:
+      type: http
+      scheme: bearer
+      description: サーバーの環境変数 ADMIN_TOKEN と同じ値
+  requestBodies:
+    Tech:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/TechInput" }
+  responses:
+    BadRequest:
+      description: パラメーターか本文に誤りがある（code は invalid_parameter / invalid_body / validation_failed）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: トークンが無い、または違う（code は unauthorized）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    WritesDisabled:
+      description: このサーバーでは書き込みを閉じている（code は writes_disabled）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: 見つからない（code は not_found）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Tech:
+      type: object
+      required: [id, name, description, score, level]
+      properties:
+        id: { type: integer, examples: [8] }
+        name: { type: string, examples: [量子暗号通信] }
+        description: { type: string, examples: [解読不可能な量子もつれを利用した秘匿通信] }
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: 実現度。現実にどれくらい近いか
+          examples: [88]
+        level:
+          type: string
+          enum: [fiction, emerging, reality]
+          description: 実現度を 3 段階に丸めたもの。0〜29 は fiction、30〜69 は emerging、70〜100 は reality
+          examples: [reality]
+    TechInput:
+      type: object
+      required: [name, score]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 500, default: "" }
+        score: { type: integer, minimum: 0, maximum: 100 }
+    Stats:
+      type: object
+      required: [count, average, min, max, levels]
+      properties:
+        count: { type: integer, examples: [15] }
+        average: { type: number, description: 実現度の平均（小数第 1 位まで）, examples: [46.9] }
+        min: { type: integer, examples: [1] }
+        max: { type: integer, examples: [91] }
+        levels:
+          type: object
+          required: [fiction, emerging, reality]
+          properties:
+            fiction: { type: integer, examples: [5] }
+            emerging: { type: integer, examples: [6] }
+            reality: { type: integer, examples: [4] }
+    Health:
+      type: object
+      required: [status, store]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        store: { type: string, enum: [memory, postgres] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_parameter, invalid_body, validation_failed, not_found, method_not_allowed, unauthorized, writes_disabled, internal_error]
+            message: { type: string }
+            field: { type: string, description: 入力の誤りのとき、どの項目か }
