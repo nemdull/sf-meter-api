@@ -70,7 +70,9 @@ jobs:
         run: go test -race -count=1 -coverprofile=coverage.out ./...
 
       - name: PostgreSQL のテストが飛ばされていないこと
-        run: go test -count=1 -run TestPostgresTechRepo_Contract -v ./infrastructure/ | tee /dev/stderr | grep -q -- "--- PASS: TestPostgresTechRepo_Contract"
+        run: |
+          go test -count=1 -run TestPostgresTechRepo_Contract -v ./infrastructure/ | tee result.txt
+          grep -q -- "--- PASS: TestPostgresTechRepo_Contract" result.txt
 
       - name: カバレッジ
         run: go tool cover -func=coverage.out | tail -n 1
